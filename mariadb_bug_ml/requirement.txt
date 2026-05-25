@@ -1,0 +1,6 @@
+requests
+sentence-transformers
+scikit-learn
+xgboost
+pandas
+faiss-cpu

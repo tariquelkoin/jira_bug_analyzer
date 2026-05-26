@@ -1,0 +1,31 @@
+Clean up and complete this MariaDB bug repro.
+
+Bug ID: {bug_id}
+Summary: {summary}
+Area: {area}
+
+Quality assessment:
+  Score: {score}/100
+  Level: {level}
+  Issues found: {issues}
+
+Raw description (excerpt):
+{description}
+
+Extracted SQL (may be incomplete or missing):
+{repro_sql}
+
+Crash query (query at time of crash):
+{crash_query}
+
+Stack trace excerpt:
+{stack_trace}
+
+Your task:
+1. Fix any structural SQL issues (missing semicolons, undefined tables, etc.)
+2. Add CREATE TABLE for any tables referenced but not defined — infer column types from usage
+3. Add minimal INSERT data if needed to trigger the bug
+4. If the repro is described in prose only, synthesize SQL from the description
+5. Preserve the original SQL unchanged; add only what is missing
+6. Mark every addition with -- INFERRED: <reason>
+7. Output raw SQL only — no markdown, no explanation outside SQL comments

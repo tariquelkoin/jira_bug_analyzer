@@ -1,0 +1,28 @@
+Generate an MTR test file for this MariaDB bug:
+
+Bug ID: {bug_id}
+Summary: {summary}
+Area: {area}
+Storage Engines: {engines}
+
+Description:
+{description}
+
+Extracted SQL / repro steps:
+{repro_sql}
+
+Crash query (query executing at crash time):
+{crash_query}
+
+Stack trace (for context):
+{stack_trace}
+
+Requirements:
+1. Start with: # {bug_id}: {summary}
+2. Setup: CREATE DATABASE IF NOT EXISTS test_{bug_id_safe}; USE test_{bug_id_safe};
+3. Reconstruct all tables and schema from the SQL above
+4. If multiple sessions are implied, use connect/disconnect with send/reap for concurrency
+5. Add --error before statements expected to fail or crash
+6. End with: DROP DATABASE IF EXISTS test_{bug_id_safe};
+7. Comment any step you had to guess with: # NOTE: inferred from description
+8. Do not add any markdown or explanation — raw .test content only

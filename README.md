@@ -40,7 +40,7 @@ For every JIRA ticket it processes, the tool:
 ```
 JIRA ticket
     ↓
-Fetch bug data
+Fetch bug data (streaming, one page at a time)
     ↓
 Extract SQL + stack trace + crash query   ← rule-based, 3-tier
     ↓
@@ -161,16 +161,28 @@ export JIRA_MTR_BACKEND=none
 
 ## Running the Script
 
+### Fetch bugs updated today (default)
+
+```bash
+python3 jira_to_file.py
+```
+
+### Fetch bugs updated in the last N days
+
+```bash
+python3 jira_to_file.py --days=7
+```
+
+### Fetch all bugs ever (streaming + resume safe)
+
+```bash
+python3 jira_to_file.py --full
+```
+
 ### Single bug
 
 ```bash
 python3 jira_to_file.py MDEV-39152
-```
-
-### Bulk fetch (latest bugs)
-
-```bash
-python3 jira_to_file.py
 ```
 
 ### Full example with Claude backend
@@ -184,17 +196,28 @@ python3 jira_to_file.py MDEV-39152
 ### What you'll see
 
 ```
-Fetching single issue: MDEV-39152
-  Generating MTR test via [claude]...
+Fetching bugs updated in the last 1 day(s)...
+  Processed 3 new | skipped 0 already done | offset 100
 Saved MDEV-39152 | area=Galera, InnoDB, Sequences | quality=82/100 (good) | repro.test generated
+Saved MDEV-39151 | area=InnoDB, DDL | quality=85/100 (good) | repro.test generated
+Saved MDEV-39150 | area=Optimizer | quality=38/100 (shaky) | repro.test generated | repro_cleaned.sql written
 ```
 
-For a shaky repro:
+### Resume support
+
+If a bulk run is interrupted, just run the script again — it reads `bug_dataset.jsonl` to find already-processed bugs and skips them automatically:
+
 ```
-Fetching single issue: MDEV-12345
-  Repro quality=38/100 (shaky) — cleaning up via [claude]...
-  Generating MTR test via [claude]...
-Saved MDEV-12345 | area=Optimizer | quality=38/100 (shaky) | repro.test generated | repro_cleaned.sql written
+Resuming — 1150 bugs already in dataset, skipping them.
+Fetching bugs updated in the last 1 day(s)...
+```
+
+### Run daily via cron
+
+```bash
+crontab -e
+# Add this line to run every morning at 7am:
+0 7 * * * cd /home/user/jira_bug_analyzer && python3 jira_to_file.py >> logs/daily.log 2>&1
 ```
 
 ---
@@ -246,7 +269,6 @@ A bug can belong to multiple areas (e.g. a Galera crash involving InnoDB sequenc
 - [ ] Fetch and parse JIRA comments (many repro steps live there, not in the description)
 - [ ] RAG-based plugin context injection — load area-specific knowledge into prompts at runtime
 - [ ] MTR test syntax validation — catch obvious errors before saving
-- [ ] `--resume` flag for incremental bulk fetch (skip already-processed bugs)
 - [ ] Fine-tuning pipeline — use accumulated MTR tests to fine-tune a local model
 - [ ] Web UI for browsing the generated dataset locally
 

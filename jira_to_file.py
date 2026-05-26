@@ -9,7 +9,7 @@ import sys
 # =========================
 
 BASE_URL = "https://jira.mariadb.org/rest/api/2"
-JQL = "project=MDEV ORDER BY updated DESC"
+JQL = "project=MDEV AND updated >= -1d ORDER BY updated DESC"
 MAX_RESULTS = 100
 BASE_DIR = "bugs"
 DATASET_FILE = "bug_dataset.jsonl"
@@ -860,21 +860,64 @@ def fetch_single_issue(issue_key):
     return response.json()
 
 
-def fetch_multiple_issues():
+def fetch_and_process_issues(processed_keys):
+    """
+    Streaming fetch — fetches one page at a time and yields each issue
+    immediately for processing. Never holds more than one page in memory.
+    Skips keys already in processed_keys (resume support).
+    """
     url = f"{BASE_URL}/search"
     startAt = 0
-    all_issues = []
+    total_fetched = 0
+    total_skipped = 0
+
     while True:
         params = {"jql": JQL, "maxResults": MAX_RESULTS, "startAt": startAt}
-        response = requests.get(url, params=params)
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+        except Exception as e:
+            print(f"  [fetch error at offset {startAt}] {e} — retrying in 5s...")
+            import time; time.sleep(5)
+            continue
+
         data = response.json()
         issues = data.get("issues", [])
         if not issues:
             break
-        all_issues.extend(issues)
+
+        for issue in issues:
+            key = issue.get("key", "")
+            if key in processed_keys:
+                total_skipped += 1
+                continue
+            total_fetched += 1
+            yield issue
+
         startAt += len(issues)
-        print(f"Fetched {len(all_issues)} issues...")
-    return all_issues
+        print(f"  Processed {total_fetched} new | skipped {total_skipped} already done | offset {startAt}")
+
+
+def load_processed_keys():
+    """
+    Read bug_dataset.jsonl and return the set of already-processed bug IDs.
+    Used for resume support — avoids reprocessing bugs from a previous run.
+    """
+    keys = set()
+    if not os.path.exists(DATASET_FILE):
+        return keys
+    with open(DATASET_FILE, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+                if "bug_id" in record:
+                    keys.add(record["bug_id"])
+            except json.JSONDecodeError:
+                continue
+    return keys
 
 
 # =========================
@@ -1008,18 +1051,45 @@ def save_issue(issue):
 def main():
     load_prompts()
     os.makedirs(BASE_DIR, exist_ok=True)
-    if os.path.exists(DATASET_FILE):
-        os.remove(DATASET_FILE)
 
-    if len(sys.argv) > 1:
-        issue_key = sys.argv[1].strip()
+    # Parse simple flags: MDEV-XXXXX | --full | --days=N
+    args = sys.argv[1:]
+    full_fetch = "--full" in args
+    days = 1
+    for arg in args:
+        if arg.startswith("--days="):
+            try:
+                days = int(arg.split("=")[1])
+            except ValueError:
+                pass
+    issue_key = next((a for a in args if not a.startswith("--")), None)
+
+    if issue_key:
+        # --- Single issue mode ---
+        if os.path.exists(DATASET_FILE):
+            os.remove(DATASET_FILE)
         print(f"Fetching single issue: {issue_key}")
         issue = fetch_single_issue(issue_key)
         if issue:
             save_issue(issue)
     else:
-        print("Fetching multiple issues...")
-        for issue in fetch_multiple_issues():
+        # --- Bulk mode ---
+        if full_fetch:
+            jql = "project=MDEV ORDER BY updated DESC"
+            print("Full fetch mode — fetching all MDEV bugs...")
+        else:
+            jql = f"project=MDEV AND updated >= -{days}d ORDER BY updated DESC"
+            print(f"Fetching bugs updated in the last {days} day(s)...")
+
+        # Patch JQL for this run
+        global JQL
+        JQL = jql
+
+        processed_keys = load_processed_keys()
+        if processed_keys:
+            print(f"Resuming — {len(processed_keys)} bugs already in dataset, skipping them.")
+
+        for issue in fetch_and_process_issues(processed_keys):
             save_issue(issue)
 
 

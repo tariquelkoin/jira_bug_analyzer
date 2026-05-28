@@ -17,12 +17,58 @@ Crash query (query executing at crash time):
 Stack trace (for context):
 {stack_trace}
 
-Requirements:
-1. Start with: # {bug_id}: {summary}
-2. Setup: CREATE DATABASE IF NOT EXISTS test_{bug_id_safe}; USE test_{bug_id_safe};
-3. Reconstruct all tables and schema from the SQL above
-4. If multiple sessions are implied, use connect/disconnect with send/reap for concurrency
-5. Add --error before statements expected to fail or crash
-6. End with: DROP DATABASE IF EXISTS test_{bug_id_safe};
-7. Comment any step you had to guess with: # NOTE: inferred from description
-8. Do not add any markdown or explanation — raw .test content only
+== REQUIREMENTS ==
+
+1. Header:
+   # {bug_id}: {summary}
+
+2. Setup:
+   CREATE DATABASE IF NOT EXISTS test_{bug_id_safe};
+   USE test_{bug_id_safe};
+
+3. If the bug involves multiple sessions or concurrent operations:
+   - Open named connections at the top: connect (con1,localhost,root,,test_{bug_id_safe});
+   - Use "connection con1;" to switch between sessions
+   - Use "send <query>;" for a statement that will block
+   - Use "reap;" in the same connection to collect its result
+   - NEVER write "# s1" or "# s2" — use real MTR connection directives
+
+4. Reconstruct all tables and schema from the SQL above.
+
+5. Add --error before statements expected to fail or crash.
+
+6. Cleanup at the end:
+   disconnect con1;   (if connections were opened)
+   connection default;
+   DROP DATABASE IF EXISTS test_{bug_id_safe};
+
+7. Mark any guessed step with: # NOTE: inferred from description
+
+8. Output raw .test content only — no markdown, no backticks, no explanation.
+
+== MULTI-SESSION EXAMPLE ==
+If the repro has two sessions doing concurrent operations, structure it like:
+
+connect (con1,localhost,root,,test_{bug_id_safe});
+connect (con2,localhost,root,,test_{bug_id_safe});
+
+connection con1;
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN;
+send UPDATE t1 SET c1 = 1 WHERE c2 = 1;
+
+connection con2;
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN;
+UPDATE t1 SET c1 = 2 WHERE c2 = 2;
+
+connection con1;
+reap;
+COMMIT;
+
+connection con2;
+COMMIT;
+
+disconnect con1;
+disconnect con2;
+connection default;

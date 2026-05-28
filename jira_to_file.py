@@ -1043,37 +1043,150 @@ def save_issue(issue):
     cleaned_str = " | repro_cleaned.sql written" if repro_sql_cleaned else ""
     print(f"Saved {key} | area={area_str} | {quality_str} | {mtr_str}{cleaned_str}")
 
+    vprint(f"  issues        : {quality['issues'] or 'none'}")
+    vprint(f"  sql extracted : {bool(repro_sql)} | crash_query: {bool(crash_query)} | stack_trace: {bool(stack_trace)}")
+    vprint(f"  engines       : {engines or 'none detected'}")
+    vprint(f"  errors        : {errors or 'none'}")
+    vprint(f"  components    : {components or 'none'}")
+
+
+# Verbose mode — set via --verbose flag or VERBOSE=1 env var
+VERBOSE = os.environ.get("VERBOSE", "0") == "1"
+
+
+def vprint(*a, **kw):
+    """Print only when verbose mode is on."""
+    if VERBOSE:
+        print(*a, **kw)
+
+
+HELP_TEXT = """
+MariaDB JIRA Bug Analyzer
+=========================
+Fetches bugs from jira.mariadb.org, extracts repro SQL, classifies areas,
+scores repro quality, and generates runnable MTR test files.
+
+Usage:
+  python3 jira_to_file.py [options] [MDEV-XXXXX ...]
+
+Modes:
+  (no args)               Fetch bugs updated in the last 1 day (default)
+  MDEV-XXXXX              Fetch and process a single bug
+  MDEV-XXXXX MDEV-YYYYY   Fetch and process multiple bugs (space-separated)
+  MDEV-XXXXX,MDEV-YYYYY   Fetch and process multiple bugs (comma-separated)
+  --file=bugs.txt         Fetch bugs listed in a file (one per line, or comma-separated)
+  --days=N                Fetch bugs updated in the last N days (default: 1)
+  --full                  Fetch all bugs ever (streaming + resume safe)
+
+Options:
+  --verbose               Print detailed output for each extraction step
+  --help                  Show this help message
+
+Backend (set via env var):
+  JIRA_MTR_BACKEND        ollama (default) | claude | openai | none
+  CLAUDE_API_KEY          Required for claude backend
+  OPENAI_API_KEY          Required for openai backend
+  OPENAI_MODEL            OpenAI model (default: gpt-4o)
+  OLLAMA_MODEL            Ollama model (default: llama3.2)
+  OLLAMA_TIMEOUT          Ollama timeout in seconds (default: 600)
+
+Tuning:
+  CLEANUP_THRESHOLD       Quality score below which LLM cleanup runs (default: 60)
+  PROMPTS_DIR             Path to prompt .txt files (default: ./prompts)
+
+Examples:
+  python3 jira_to_file.py MDEV-39152
+  python3 jira_to_file.py MDEV-39152 MDEV-39151 MDEV-39150
+  python3 jira_to_file.py MDEV-39152,MDEV-39151,MDEV-39150
+  python3 jira_to_file.py --file=bugs.txt
+  python3 jira_to_file.py --days=7 --verbose
+  python3 jira_to_file.py --full
+  JIRA_MTR_BACKEND=claude CLAUDE_API_KEY=sk-ant-... python3 jira_to_file.py MDEV-39152
+
+Output:
+  bugs/<MDEV-KEY>/
+    metadata.json, summary.txt, description.txt, area.txt,
+    repro.sql, repro_cleaned.sql, crash_query.sql, stack_trace.txt,
+    repro.test, repro_quality.json, training_text.txt, ml_features.json
+  bug_dataset.jsonl  (one record per bug, append-mode)
+"""
+
 
 # =========================
 # MAIN
 # =========================
 
 def main():
+    global VERBOSE
+
     load_prompts()
     os.makedirs(BASE_DIR, exist_ok=True)
 
-    # Parse simple flags: MDEV-XXXXX | --full | --days=N
     args = sys.argv[1:]
+
+    # --help
+    if "--help" in args or "-h" in args:
+        print(HELP_TEXT)
+        sys.exit(0)
+
+    # --verbose
+    if "--verbose" in args:
+        VERBOSE = True
+        args = [a for a in args if a != "--verbose"]
+
+    # --full
     full_fetch = "--full" in args
+
+    # --days=N
     days = 1
     for arg in args:
         if arg.startswith("--days="):
             try:
                 days = int(arg.split("=")[1])
             except ValueError:
-                pass
-    issue_key = next((a for a in args if not a.startswith("--")), None)
+                print(f"Invalid --days value: {arg}")
+                sys.exit(1)
 
-    if issue_key:
-        # --- Single issue mode ---
-        if os.path.exists(DATASET_FILE):
-            os.remove(DATASET_FILE)
-        print(f"Fetching single issue: {issue_key}")
-        issue = fetch_single_issue(issue_key)
-        if issue:
-            save_issue(issue)
+    # --file=path
+    file_path = None
+    for arg in args:
+        if arg.startswith("--file="):
+            file_path = arg.split("=", 1)[1]
+
+    # Positional MDEV keys (any arg not starting with --)
+    # Supports both space-separated and comma-separated keys
+    raw_keys = [a for a in args if not a.startswith("--")]
+    issue_keys = []
+    for k in raw_keys:
+        issue_keys.extend([x.strip() for x in k.split(",") if x.strip()])
+
+    # --- File mode ---
+    if file_path:
+        if not os.path.exists(file_path):
+            print(f"Error: file not found: {file_path}")
+            sys.exit(1)
+        with open(file_path, "r") as f:
+            issue_keys = []
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                issue_keys.extend([x.strip() for x in line.split(",") if x.strip()])
+        print(f"Loaded {len(issue_keys)} bug keys from {file_path}")
+
+    # --- Single / multi issue mode ---
+    if issue_keys:
+        for key in issue_keys:
+            vprint(f"\n{'='*50}")
+            print(f"Fetching: {key}")
+            issue = fetch_single_issue(key)
+            if issue:
+                save_issue(issue)
+            else:
+                print(f"  Skipping {key} — could not fetch")
+
+    # --- Bulk / daily mode ---
     else:
-        # --- Bulk mode ---
         if full_fetch:
             jql = "project=MDEV ORDER BY updated DESC"
             print("Full fetch mode — fetching all MDEV bugs...")
@@ -1081,7 +1194,6 @@ def main():
             jql = f"project=MDEV AND updated >= -{days}d ORDER BY updated DESC"
             print(f"Fetching bugs updated in the last {days} day(s)...")
 
-        # Patch JQL for this run
         global JQL
         JQL = jql
 
@@ -1090,8 +1202,10 @@ def main():
             print(f"Resuming — {len(processed_keys)} bugs already in dataset, skipping them.")
 
         for issue in fetch_and_process_issues(processed_keys):
+            vprint(f"\n{'='*50}")
             save_issue(issue)
 
 
 if __name__ == "__main__":
     main()
+

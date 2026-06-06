@@ -91,6 +91,32 @@ bug_dataset.jsonl            # one record per bug, append-mode
 
 ---
 
+## Project Structure
+
+```
+jira_bug_analyzer/
+├── jira_to_file.py          # entry point — CLI arg parsing and orchestration
+├── lib/                     # core package
+│   ├── config.py            # env vars, paths, and constants
+│   ├── fetcher.py           # JIRA API fetching with streaming + resume support
+│   ├── extractor.py         # rule-based SQL, stack trace, and crash query extraction
+│   ├── classifier.py        # rule-based bug area classification
+│   ├── quality.py           # repro quality scoring and LLM-driven cleanup
+│   ├── mtr_builder.py       # MTR test file generation via LLM
+│   ├── llm.py               # LLM backend abstraction (Ollama / Claude / OpenAI)
+│   ├── dataset.py           # structured output writer (JSONL + per-bug files)
+│   └── prompts.py           # prompt file loader
+├── prompts/                 # plain-text LLM prompt templates (edit without touching Python)
+│   ├── mtr_system.txt
+│   ├── mtr_user.txt
+│   ├── cleanup_system.txt
+│   └── cleanup_user.txt
+├── bugs/                    # generated output — one directory per MDEV ticket
+└── bug_dataset.jsonl        # append-mode structured dataset, one record per bug
+```
+
+---
+
 ## Setup & Installation
 
 ### Prerequisites

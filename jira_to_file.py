@@ -1,9 +1,9 @@
 import os
 import sys
-import analyzer.config as config
-from analyzer.prompts import load_prompts
-from analyzer.fetcher import fetch_single_issue, fetch_and_process_issues, load_processed_keys
-from analyzer.dataset import save_issue
+import lib.config as config
+from lib.prompts import load_prompts
+from lib.fetcher import fetch_single_issue, fetch_and_process_issues, load_processed_keys
+from lib.dataset import save_issue
 
 HELP_TEXT = """
 MariaDB JIRA Bug Analyzer

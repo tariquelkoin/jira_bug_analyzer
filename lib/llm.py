@@ -1,7 +1,7 @@
 import re
 import time
 import requests
-from analyzer.config import (
+from lib.config import (
     MTR_BACKEND, OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT,
     CLAUDE_API_KEY, CLAUDE_MODEL, OPENAI_API_KEY, OPENAI_MODEL,
 )

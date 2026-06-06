@@ -1,15 +1,15 @@
 import json
 import os
-from analyzer.config import BASE_DIR, DATASET_FILE, CLEANUP_QUALITY_THRESHOLD, MTR_BACKEND, VERBOSE
-from analyzer.extractor import (
+from lib.config import BASE_DIR, DATASET_FILE, CLEANUP_QUALITY_THRESHOLD, MTR_BACKEND, VERBOSE
+from lib.extractor import (
     normalize_text, get_description_text,
     extract_repro_sql, extract_stack_trace, extract_crash_query,
     extract_error_patterns, extract_assertions,
     detect_storage_engines, detect_sql_keywords,
 )
-from analyzer.classifier import identify_area
-from analyzer.quality import assess_repro_quality, cleanup_and_enrich_repro
-from analyzer.mtr_builder import generate_mtr_test
+from lib.classifier import identify_area
+from lib.quality import assess_repro_quality, cleanup_and_enrich_repro
+from lib.mtr_builder import generate_mtr_test
 
 
 def build_training_text(summary, description, repro_sql, stack_trace,

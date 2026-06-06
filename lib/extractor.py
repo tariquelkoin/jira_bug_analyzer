@@ -1,5 +1,5 @@
 import re
-from analyzer.config import SQL_KEYWORDS, ERROR_PATTERNS, ASSERTION_PATTERNS, ENGINE_KEYWORDS
+from lib.config import SQL_KEYWORDS, ERROR_PATTERNS, ASSERTION_PATTERNS, ENGINE_KEYWORDS
 
 # Regex: lines that start a SQL statement
 SQL_LINE_STARTERS = re.compile(

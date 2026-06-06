@@ -1,5 +1,5 @@
 import os
-from analyzer.config import PROMPTS_DIR
+from lib.config import PROMPTS_DIR
 
 MTR_SYSTEM_PROMPT            = ""
 MTR_USER_PROMPT_TEMPLATE     = ""

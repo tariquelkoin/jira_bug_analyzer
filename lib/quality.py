@@ -1,13 +1,13 @@
 import re
 import requests
-from analyzer.config import (
+from lib.config import (
     MTR_BACKEND, CLEANUP_QUALITY_THRESHOLD,
     CLAUDE_API_KEY, CLAUDE_MODEL, OPENAI_API_KEY, OPENAI_MODEL,
     OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT,
 )
-from analyzer.extractor import SQL_LINE_STARTERS, TABLE_DEF_PATTERN, TABLE_REF_PATTERN, PROSE_SQL_SIGNALS
-from analyzer.llm import call_llm, strip_markdown_fences
-import analyzer.prompts as P
+from lib.extractor import SQL_LINE_STARTERS, TABLE_DEF_PATTERN, TABLE_REF_PATTERN, PROSE_SQL_SIGNALS
+from lib.llm import call_llm, strip_markdown_fences
+import lib.prompts as P
 
 
 def assess_repro_quality(description, repro_sql, stack_trace, crash_query, summary):

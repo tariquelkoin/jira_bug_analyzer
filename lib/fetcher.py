@@ -1,7 +1,7 @@
 import json
 import time
 import requests
-from analyzer.config import BASE_URL, MAX_RESULTS, DATASET_FILE
+from lib.config import BASE_URL, MAX_RESULTS, DATASET_FILE
 
 
 def fetch_single_issue(issue_key):

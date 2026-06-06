@@ -256,6 +256,57 @@ def _categorise_lines(session_lines):
 
 
 # -------------------------------------------------------
+# STATEMENT COLLECTOR
+# -------------------------------------------------------
+
+def _collect_repro_statements(sql_text):
+    """
+    Return complete SQL statements from repro SQL, skipping CREATE/INSERT/USE/
+    comment lines.  Multi-line statements (pretty-printed across many lines) are
+    joined into a single string so only one trailing semicolon is added later.
+
+    Statement boundaries are detected by: line ends with ';' AND cumulative paren
+    depth == 0.  Unterminated trailing content is returned as-is (caller adds ';').
+    """
+    skip = (CREATE_STMT, INSERT_STMT, re.compile(r"^\s*USE\s+", re.IGNORECASE))
+    result = []
+    pending = []
+    stmt_depth = 0
+    skip_depth = 0
+    skipping = False
+
+    for line in sql_text.splitlines():
+        s = line.strip()
+        if not s or s.startswith(("--", "#")):
+            continue
+
+        if skipping:
+            skip_depth += s.count("(") - s.count(")")
+            if s.endswith(";") and skip_depth <= 0:
+                skipping = False
+                skip_depth = 0
+            continue
+
+        if any(p.match(s) for p in skip):
+            if not s.endswith(";"):
+                skipping = True
+                skip_depth = s.count("(") - s.count(")")
+            continue
+
+        pending.append(line.rstrip())  # preserve indentation
+        stmt_depth += s.count("(") - s.count(")")
+        if s.endswith(";") and stmt_depth <= 0:
+            result.append("\n".join(pending))
+            pending = []
+            stmt_depth = 0
+
+    if pending:
+        result.append("\n".join(pending))
+
+    return result
+
+
+# -------------------------------------------------------
 # RULE-BASED MTR BUILDER
 # -------------------------------------------------------
 
@@ -384,15 +435,7 @@ def build_mtr_from_rules(bug_id, summary, repro_sql, crash_query,
     # --------------------------------------------------
     if not is_multi:
         out.append("--echo # Reproduction")
-        repro_lines = [
-            l.strip() for l in sql_text.splitlines()
-            if l.strip()
-            and not CREATE_STMT.match(l.strip())
-            and not INSERT_STMT.match(l.strip())
-            and not re.match(r"USE\s+", l.strip(), re.IGNORECASE)
-            and not l.strip().startswith(("--", "#"))
-        ]
-        for stmt in repro_lines:
+        for stmt in _collect_repro_statements(sql_text):
             if not stmt.endswith(";"): stmt += ";"
             if error_dir and crash_query and stmt.upper().startswith(crash_query.upper()[:10]):
                 out.append(error_dir)
